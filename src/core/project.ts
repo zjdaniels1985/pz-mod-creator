@@ -11,6 +11,8 @@ export const DEFAULT_IGNORE_GLOBS = [
   ".types/**",
 ];
 export const MOD_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
+const WINDOWS_MAX_PATH = 260;
+const WINDOWS_RESERVED_NAME_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 export type BuildTarget = "b41" | "b42";
 
@@ -59,6 +61,13 @@ export function validateModId(modId: string): ValidationResult {
     return { valid: false, message: "Mod ID cannot contain spaces." };
   }
 
+  if (modId.endsWith(".") || modId.endsWith(" ")) {
+    return {
+      valid: false,
+      message: "Mod ID cannot end with a period or space.",
+    };
+  }
+
   if (!MOD_ID_PATTERN.test(modId)) {
     return {
       valid: false,
@@ -67,24 +76,48 @@ export function validateModId(modId: string): ValidationResult {
     };
   }
 
+  if (isWindowsReservedName(modId)) {
+    return {
+      valid: false,
+      message:
+        "Mod ID cannot be a Windows reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9).",
+    };
+  }
+
   return { valid: true };
 }
 
 export function sanitizePathSegment(value: string): string {
-  const sanitized = value
+  const strippedTrailing = value.trim().replace(/[.\s\\]+$/g, "");
+  let sanitized = strippedTrailing
     .trim()
-    .replace(/[/:*?"<>|]/g, "-")
+    .replace(/[\\/:*?"<>|]/g, "-")
     .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-  return sanitized || "project-zomboid-mod";
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  if (!sanitized) {
+    sanitized = "project-zomboid-mod";
+  }
+  if (isWindowsReservedName(sanitized)) {
+    sanitized = `${sanitized}-mod`;
+  }
+  return sanitized;
 }
 
 export function sanitizeModIdCandidate(value: string): string {
-  const sanitized = value
+  let sanitized = value
     .trim()
+    .replace(/[.\s\\]+$/g, "")
     .replace(/\s+/g, "")
     .replace(/[^A-Za-z0-9_.-]/g, "");
-  return sanitized || "MyMod";
+  if (!sanitized) {
+    sanitized = "MyMod";
+  }
+  if (isWindowsReservedName(sanitized)) {
+    sanitized = `${sanitized}Mod`;
+  }
+  return sanitized;
 }
 
 export function getVersionMin(buildTarget: BuildTarget): string {
@@ -172,15 +205,20 @@ export function resolveConfiguredOutputDirectory(
     return path.join(homeDirectory, "Zomboid", "Workshop");
   }
 
-  if (path.isAbsolute(configuredDirectory)) {
-    return path.normalize(configuredDirectory);
+  const trimmedDirectory = configuredDirectory.trim();
+  const expandedDirectory = trimmedDirectory
+    .replace(/^~(?=$|[\\/])/, homeDirectory)
+    .replace(/\$\{userHome\}/g, homeDirectory);
+
+  if (path.isAbsolute(expandedDirectory)) {
+    return path.normalize(expandedDirectory);
   }
 
   if (workspaceRoot) {
-    return path.resolve(workspaceRoot, configuredDirectory);
+    return path.resolve(workspaceRoot, expandedDirectory);
   }
 
-  return path.resolve(configuredDirectory);
+  return path.resolve(expandedDirectory);
 }
 
 export function resolveOutputProjectRoot(
@@ -202,6 +240,28 @@ export function isPathInside(
     relative === "" ||
     (!relative.startsWith("..") && !path.isAbsolute(relative))
   );
+}
+
+export function exceedsWindowsPathLimit(filePath: string): boolean {
+  return path.resolve(filePath).length > WINDOWS_MAX_PATH;
+}
+
+export function pathsAreEqual(a: string, b: string): boolean {
+  const left = path.resolve(a);
+  const right = path.resolve(b);
+  if (process.platform === "win32" || process.platform === "darwin") {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
+}
+
+export function isWindowsReservedName(name: string): boolean {
+  const normalized = name.trim().replace(/[.\s]+$/g, "");
+  const baseName = normalized.split(".")[0];
+  if (!baseName) {
+    return false;
+  }
+  return WINDOWS_RESERVED_NAME_PATTERN.test(baseName);
 }
 
 export function createProjectConfig(

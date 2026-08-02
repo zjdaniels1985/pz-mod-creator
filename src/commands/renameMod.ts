@@ -164,6 +164,10 @@ export function registerRenameModCommand(
         mod.id,
         newModId,
       );
+      const rewrittenReferenceCount = rewrittenFiles.reduce(
+        (sum, file) => sum + file.replacements,
+        0,
+      );
       for (const rewritten of rewrittenFiles) {
         logInfo(
           services.output,
@@ -204,15 +208,16 @@ export function registerRenameModCommand(
         `Renamed mod ${mod.id} to ${newModId}` +
           (nameChanged ? ` and display name to "${updatedName}"` : "") +
           ` (${renamedFiles.length} file(s) renamed, ` +
-          `${rewrittenFiles.length} file(s) updated).`,
+          `${rewrittenReferenceCount} reference(s) updated in ` +
+          `${rewrittenFiles.length} file(s)).`,
       );
       vscode.window.showInformationMessage(
         `Renamed mod to ${newModId}.` +
           (renamedFiles.length
             ? ` Updated ${renamedFiles.length} file name(s).`
             : "") +
-          (rewrittenFiles.length
-            ? ` Rewrote references in ${rewrittenFiles.length} file(s).`
+          (rewrittenReferenceCount
+            ? ` Rewrote ${rewrittenReferenceCount} reference(s) in ${rewrittenFiles.length} file(s).`
             : ""),
       );
     },
