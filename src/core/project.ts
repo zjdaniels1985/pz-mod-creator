@@ -1,0 +1,223 @@
+import * as path from "node:path";
+
+import { type FileSystemAdapter, readJsonFile, writeJsonFile } from "./fs";
+
+export const PROJECT_FILE_NAME = ".pzmodcreator.json";
+export const DEFAULT_IGNORE_GLOBS = [
+  "**/.git/**",
+  "**/node_modules/**",
+  "**/.pzmodcreator.json",
+  "**/.vscode/**",
+  ".types/**",
+];
+export const MOD_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
+
+export type BuildTarget = "b41" | "b42";
+
+export interface ModDefinition {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  requires: string[];
+}
+
+export interface ProjectConfig {
+  version: number;
+  generatedBy: string;
+  projectName: string;
+  workshopTitle: string;
+  description: string;
+  author: string;
+  buildTarget: BuildTarget;
+  createdAt: string;
+  updatedAt: string;
+  mods: ModDefinition[];
+}
+
+export interface CreateProjectConfigInput {
+  projectName: string;
+  workshopTitle: string;
+  description: string;
+  author: string;
+  buildTarget: BuildTarget;
+  firstMod: ModDefinition;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  message?: string;
+}
+
+export function validateModId(modId: string): ValidationResult {
+  if (!modId.trim()) {
+    return { valid: false, message: "Mod ID is required." };
+  }
+
+  if (modId.includes(" ")) {
+    return { valid: false, message: "Mod ID cannot contain spaces." };
+  }
+
+  if (!MOD_ID_PATTERN.test(modId)) {
+    return {
+      valid: false,
+      message:
+        "Only letters, numbers, underscore, period, and hyphen are allowed.",
+    };
+  }
+
+  return { valid: true };
+}
+
+export function sanitizePathSegment(value: string): string {
+  const sanitized = value
+    .trim()
+    .replace(/[/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+  return sanitized || "project-zomboid-mod";
+}
+
+export function sanitizeModIdCandidate(value: string): string {
+  const sanitized = value
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[^A-Za-z0-9_.-]/g, "");
+  return sanitized || "MyMod";
+}
+
+export function getVersionMin(buildTarget: BuildTarget): string {
+  return buildTarget === "b42" ? "42.0" : "41.0";
+}
+
+export function resolveProjectFilePath(projectRoot: string): string {
+  return path.join(projectRoot, PROJECT_FILE_NAME);
+}
+
+export function resolveModsRoot(
+  projectRoot: string,
+  buildTarget: BuildTarget,
+): string {
+  return buildTarget === "b42"
+    ? path.join(projectRoot, "Contents", "mods")
+    : path.join(projectRoot, "mods");
+}
+
+export function resolveModRoot(
+  projectRoot: string,
+  buildTarget: BuildTarget,
+  modId: string,
+): string {
+  return path.join(resolveModsRoot(projectRoot, buildTarget), modId);
+}
+
+export function resolveTranslationRoot(
+  projectRoot: string,
+  buildTarget: BuildTarget,
+  modId: string,
+): string {
+  return path.join(
+    resolveModRoot(projectRoot, buildTarget, modId),
+    "media",
+    "lua",
+    "shared",
+    "Translate",
+  );
+}
+
+export function resolveConfiguredOutputDirectory(
+  configuredDirectory: string | undefined,
+  homeDirectory: string,
+  workspaceRoot?: string,
+): string {
+  if (!configuredDirectory || !configuredDirectory.trim()) {
+    return path.join(homeDirectory, "Zomboid", "Workshop");
+  }
+
+  if (path.isAbsolute(configuredDirectory)) {
+    return path.normalize(configuredDirectory);
+  }
+
+  if (workspaceRoot) {
+    return path.resolve(workspaceRoot, configuredDirectory);
+  }
+
+  return path.resolve(configuredDirectory);
+}
+
+export function resolveOutputProjectRoot(
+  outputDirectory: string,
+  projectName: string,
+): string {
+  return path.join(outputDirectory, sanitizePathSegment(projectName));
+}
+
+export function isPathInside(
+  parentPath: string,
+  candidatePath: string,
+): boolean {
+  const relative = path.relative(
+    path.resolve(parentPath),
+    path.resolve(candidatePath),
+  );
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
+}
+
+export function createProjectConfig(
+  input: CreateProjectConfigInput,
+): ProjectConfig {
+  const timestamp = new Date().toISOString();
+  return {
+    version: 1,
+    generatedBy: "Project Zomboid Mod Creator",
+    projectName: input.projectName,
+    workshopTitle: input.workshopTitle,
+    description: input.description,
+    author: input.author,
+    buildTarget: input.buildTarget,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    mods: [input.firstMod],
+  };
+}
+
+export async function readProjectConfig(
+  fileSystem: FileSystemAdapter,
+  projectRoot: string,
+): Promise<ProjectConfig> {
+  return await readJsonFile<ProjectConfig>(
+    fileSystem,
+    resolveProjectFilePath(projectRoot),
+  );
+}
+
+export async function writeProjectConfig(
+  fileSystem: FileSystemAdapter,
+  projectRoot: string,
+  projectConfig: ProjectConfig,
+): Promise<void> {
+  projectConfig.updatedAt = new Date().toISOString();
+  await writeJsonFile(
+    fileSystem,
+    resolveProjectFilePath(projectRoot),
+    projectConfig,
+  );
+}
+
+export function findMod(
+  projectConfig: ProjectConfig,
+  modId: string,
+): ModDefinition | undefined {
+  return projectConfig.mods.find((mod) => mod.id === modId);
+}
+
+export function findModIndex(
+  projectConfig: ProjectConfig,
+  modId: string,
+): number {
+  return projectConfig.mods.findIndex((mod) => mod.id === modId);
+}
