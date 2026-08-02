@@ -109,6 +109,7 @@ function renderModInfo(mod: ModDefinition, versionMin?: string): string {
     ["id", mod.id],
     ["description", mod.description.replace(/\r?\n/g, " ").trim()],
     ["poster", "poster.png"],
+    // The in-game "Author" field is populated from singular `author=`.
     ["author", mod.author],
     ["modversion", mod.version],
     ["versionMin", versionMin ?? ""],

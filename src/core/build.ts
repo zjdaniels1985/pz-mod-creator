@@ -10,7 +10,11 @@ import {
   type FileSystemAdapter,
   walkFiles,
 } from "./fs";
-import { isPathInside } from "./project";
+import {
+  exceedsWindowsPathLimit,
+  isPathInside,
+  pathsAreEqual,
+} from "./project";
 
 export interface BuildResult {
   outputRoot: string;
@@ -115,6 +119,7 @@ export async function buildProject(
   if (longPathWarnings.length) {
     options.logger?.(
       `Warning: ${longPathWarnings.length} output path(s) approach the 260-character Windows limit. ` +
+        "Build 42 adds a version-folder level (for example <ModId>/42.0/media), " +
         "Enable long path support or choose a shorter output directory. " +
         `First: ${longPathWarnings[0]}`,
     );

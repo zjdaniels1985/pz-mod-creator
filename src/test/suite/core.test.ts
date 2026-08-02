@@ -1,18 +1,29 @@
 import * as assert from "node:assert";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import { shouldIgnoreRelativePath } from "../../core/build";
+import { NodeFileSystemAdapter, readTextFile } from "../../core/fs";
 import {
+  getContentVersionFolder,
   isPathInside,
   isWindowsReservedName,
   resolveConfiguredOutputDirectory,
+  resolveModContentRoot,
+  resolveModMediaRoot,
   resolveModRoot,
   resolveModsRoot,
   sanitizeModIdCandidate,
   sanitizePathSegment,
   validateModId,
 } from "../../core/project";
-import { buildModRenamePlan, isCaseOnlyRename } from "../../core/scaffold";
+import {
+  buildModRenamePlan,
+  isCaseOnlyRename,
+  rewriteModIdReferences,
+  writeModInfo,
+} from "../../core/scaffold";
 import { rewriteTranslationHeaders } from "../../core/translations";
 
 /** Builds an expected path with the host separator, matching `path.join`. */
@@ -58,6 +69,20 @@ describe("core logic", () => {
       resolveModRoot(projectRoot, "b42", "TestMod"),
       p(projectRoot, "Contents", "mods", "TestMod"),
     );
+    eqPath(
+      resolveModContentRoot(projectRoot, "b42", "TestMod"),
+      p(projectRoot, "Contents", "mods", "TestMod", "42.0"),
+    );
+    eqPath(
+      resolveModContentRoot(projectRoot, "b41", "TestMod"),
+      p(projectRoot, "mods", "TestMod"),
+    );
+    eqPath(
+      resolveModMediaRoot(projectRoot, "b42", "TestMod"),
+      p(projectRoot, "Contents", "mods", "TestMod", "42.0", "media"),
+    );
+    assert.strictEqual(getContentVersionFolder("b42"), "42.0");
+    assert.strictEqual(getContentVersionFolder("b41"), undefined);
   });
 
   it("resolves output directory defaults and relative overrides", () => {
@@ -198,6 +223,7 @@ describe("core logic", () => {
           "Contents",
           "mods",
           "NewMod",
+          "42.0",
           "media",
           "lua",
           "client",
@@ -208,6 +234,7 @@ describe("core logic", () => {
           "Contents",
           "mods",
           "NewMod",
+          "42.0",
           "media",
           "lua",
           "server",
@@ -218,6 +245,7 @@ describe("core logic", () => {
           "Contents",
           "mods",
           "NewMod",
+          "42.0",
           "media",
           "lua",
           "shared",
@@ -231,5 +259,115 @@ describe("core logic", () => {
     assert.strictEqual(isCaseOnlyRename("MyMod", "mymod"), true);
     assert.strictEqual(isCaseOnlyRename("MyMod", "MyMod"), false);
     assert.strictEqual(isCaseOnlyRename("MyMod", "OtherMod"), false);
+  });
+
+  it("writes b42 mod.info root and version copies while omitting empty values", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pzmc-core-"));
+    const fileSystem = new NodeFileSystemAdapter();
+    try {
+      const mod = {
+        id: "MyMod",
+        name: "My Mod",
+        description: "line one\nline two",
+        author: "Alice",
+        version: "1.2.3",
+        requires: [],
+      };
+      await writeModInfo(fileSystem, "", tempRoot, "b42", mod);
+
+      const rootInfo = await readTextFile(
+        fileSystem,
+        path.join(tempRoot, "Contents", "mods", "MyMod", "mod.info"),
+      );
+      const versionInfo = await readTextFile(
+        fileSystem,
+        path.join(tempRoot, "Contents", "mods", "MyMod", "42.0", "mod.info"),
+      );
+
+      assert.strictEqual(rootInfo.includes("versionMin="), false);
+      assert.strictEqual(rootInfo.includes("require="), false);
+      assert.strictEqual(rootInfo.includes("author=Alice"), true);
+      assert.strictEqual(
+        rootInfo.includes("description=line one line two"),
+        true,
+      );
+      assert.strictEqual(versionInfo.includes("versionMin=42.0"), true);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rewrites known mod-id reference patterns without touching unrelated text", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pzmc-rewrite-"));
+    const fileSystem = new NodeFileSystemAdapter();
+    try {
+      await fs.mkdir(path.join(tempRoot, "media"), { recursive: true });
+      const luaFile = path.join(tempRoot, "media", "sample.lua");
+      const txtFile = path.join(tempRoot, "media", "scripts.txt");
+      const untouchedFile = path.join(tempRoot, "media", "notes.md");
+
+      await fs.writeFile(
+        luaFile,
+        [
+          'require("OldId/Foo")',
+          'require "OldId/Bar"',
+          'require("Something/OldId_Shared")',
+          'MOD_ID = "OldId"',
+          'sendClientCommand(player, "OldId", "Cmd", args)',
+          'sendServerCommand("OldId", "Cmd", args)',
+          'ModData.get("OldId")',
+          "-- OldId in a comment should stay",
+          'local text = "OldId should stay here"',
+        ].join("\n"),
+      );
+      await fs.writeFile(txtFile, 'module=OldId\nvalue="OldId"\n');
+      await fs.writeFile(untouchedFile, 'require("OldId/Foo")\n');
+
+      const results = await rewriteModIdReferences(
+        fileSystem,
+        path.join(tempRoot, "media"),
+        "OldId",
+        "NewId",
+      );
+
+      const updatedLua = await fs.readFile(luaFile, "utf8");
+      const updatedTxt = await fs.readFile(txtFile, "utf8");
+      const updatedMd = await fs.readFile(untouchedFile, "utf8");
+      const byFile = new Map(results.map((item) => [item.filePath, item]));
+
+      assert.strictEqual(updatedLua.includes('require("NewId/Foo")'), true);
+      assert.strictEqual(updatedLua.includes('require "NewId/Bar"'), true);
+      assert.strictEqual(
+        updatedLua.includes('require("Something/NewId_Shared")'),
+        true,
+      );
+      assert.strictEqual(updatedLua.includes('MOD_ID = "NewId"'), true);
+      assert.strictEqual(
+        updatedLua.includes('sendClientCommand(player, "NewId", "Cmd", args)'),
+        true,
+      );
+      assert.strictEqual(
+        updatedLua.includes('sendServerCommand("NewId", "Cmd", args)'),
+        true,
+      );
+      assert.strictEqual(updatedLua.includes('ModData.get("NewId")'), true);
+      assert.strictEqual(
+        updatedLua.includes("-- OldId in a comment should stay"),
+        true,
+      );
+      assert.strictEqual(
+        updatedLua.includes('local text = "OldId should stay here"'),
+        true,
+      );
+      assert.strictEqual(updatedTxt.includes("module=OldId"), true);
+      assert.strictEqual(updatedTxt.includes('value="OldId"'), true);
+      assert.strictEqual(updatedMd.includes('require("OldId/Foo")'), true);
+      assert.strictEqual(byFile.has(luaFile), true);
+      assert.strictEqual(byFile.get(luaFile)?.replacements, 7);
+      assert.strictEqual(byFile.has(txtFile), false);
+      assert.strictEqual(byFile.has(untouchedFile), false);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });
