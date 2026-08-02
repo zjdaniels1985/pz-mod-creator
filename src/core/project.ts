@@ -91,6 +91,18 @@ export function getVersionMin(buildTarget: BuildTarget): string {
   return buildTarget === "b42" ? "42.0" : "41.0";
 }
 
+/**
+ * Build 42 namespaces mod content under a version folder (e.g. `42.0/media`),
+ * and that folder's mod.info is the one carrying `versionMin=`. The root
+ * mod.info acts as a discovery stub and must omit it. Build 41 keeps `media/`
+ * directly at the mod root with no version folder.
+ */
+export function getContentVersionFolder(
+  buildTarget: BuildTarget,
+): string | undefined {
+  return buildTarget === "b42" ? getVersionMin(buildTarget) : undefined;
+}
+
 export function resolveProjectFilePath(projectRoot: string): string {
   return path.join(projectRoot, PROJECT_FILE_NAME);
 }
@@ -112,14 +124,39 @@ export function resolveModRoot(
   return path.join(resolveModsRoot(projectRoot, buildTarget), modId);
 }
 
+/**
+ * The folder that contains `media/` for a mod. On B42 this is
+ * `<modRoot>/42.0`; on B41 it is the mod root itself. Use this for anything
+ * under `media/`; use resolveModRoot for `poster.png` and the root mod.info.
+ */
+export function resolveModContentRoot(
+  projectRoot: string,
+  buildTarget: BuildTarget,
+  modId: string,
+): string {
+  const modRoot = resolveModRoot(projectRoot, buildTarget, modId);
+  const versionFolder = getContentVersionFolder(buildTarget);
+  return versionFolder ? path.join(modRoot, versionFolder) : modRoot;
+}
+
+export function resolveModMediaRoot(
+  projectRoot: string,
+  buildTarget: BuildTarget,
+  modId: string,
+): string {
+  return path.join(
+    resolveModContentRoot(projectRoot, buildTarget, modId),
+    "media",
+  );
+}
+
 export function resolveTranslationRoot(
   projectRoot: string,
   buildTarget: BuildTarget,
   modId: string,
 ): string {
   return path.join(
-    resolveModRoot(projectRoot, buildTarget, modId),
-    "media",
+    resolveModMediaRoot(projectRoot, buildTarget, modId),
     "lua",
     "shared",
     "Translate",
@@ -220,4 +257,14 @@ export function findModIndex(
   modId: string,
 ): number {
   return projectConfig.mods.findIndex((mod) => mod.id === modId);
+}
+
+export function modIdExists(
+  projectConfig: ProjectConfig,
+  modId: string,
+  ignoreModId?: string,
+): boolean {
+  return projectConfig.mods.some(
+    (mod) => mod.id !== ignoreModId && mod.id === modId,
+  );
 }

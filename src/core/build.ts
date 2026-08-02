@@ -17,6 +17,7 @@ export interface BuildResult {
   copiedFiles: number;
   skippedFiles: number;
   deletedOutput: boolean;
+  longPathWarnings: string[];
 }
 
 export interface PendingChange {
@@ -45,12 +46,17 @@ export function shouldIgnoreRelativePath(
   relativePath: string,
   ignoreGlobs: string[],
 ): boolean {
+  // minimatch only understands forward slashes, so native win32 separators
+  // must be normalized before matching.
   const normalized = normalize(relativePath);
   return ignoreGlobs.some((pattern) => {
-    const baseMatch = minimatch(normalized, pattern, { dot: true });
-    const nestedMatch = minimatch(normalized, pattern.replace(/^\*\*\//, ""), {
-      dot: true,
-    });
+    const normalizedPattern = normalize(pattern);
+    const baseMatch = minimatch(normalized, normalizedPattern, { dot: true });
+    const nestedMatch = minimatch(
+      normalized,
+      normalizedPattern.replace(/^\*\*\//, ""),
+      { dot: true },
+    );
     return baseMatch || nestedMatch;
   });
 }
@@ -81,6 +87,7 @@ export async function buildProject(
   }
 
   const files = await walkFiles(fileSystem, projectRoot);
+  const longPathWarnings: string[] = [];
   let copiedFiles = 0;
   let skippedFiles = 0;
 
@@ -92,6 +99,11 @@ export async function buildProject(
 
     const sourcePath = path.join(projectRoot, relativePath);
     const destinationPath = path.join(options.outputRoot, relativePath);
+
+    if (exceedsWindowsPathLimit(destinationPath)) {
+      longPathWarnings.push(destinationPath);
+    }
+
     await copyFile(fileSystem, sourcePath, destinationPath);
     copiedFiles += 1;
   }
@@ -100,11 +112,20 @@ export async function buildProject(
     `Build copied ${copiedFiles} files to ${options.outputRoot}.`,
   );
 
+  if (longPathWarnings.length) {
+    options.logger?.(
+      `Warning: ${longPathWarnings.length} output path(s) approach the 260-character Windows limit. ` +
+        "Enable long path support or choose a shorter output directory. " +
+        `First: ${longPathWarnings[0]}`,
+    );
+  }
+
   return {
     outputRoot: options.outputRoot,
     copiedFiles,
     skippedFiles,
     deletedOutput,
+    longPathWarnings,
   };
 }
 
@@ -115,7 +136,7 @@ export async function cleanProjectOutput(
 ): Promise<boolean> {
   if (
     !isPathInside(outputDirectory, outputRoot) ||
-    path.resolve(outputDirectory) === path.resolve(outputRoot)
+    pathsAreEqual(outputDirectory, outputRoot)
   ) {
     throw new Error(
       "Refusing to delete outside the configured output directory.",

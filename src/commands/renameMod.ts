@@ -1,13 +1,23 @@
+import * as path from "node:path";
+
 import * as vscode from "vscode";
 
 import { exists } from "../core/fs";
-import { buildModRenamePlan } from "../core/scaffold";
 import {
+  modIdExists,
+  resolveModMediaRoot,
   resolveModRoot,
   writeProjectConfig,
   type ModDefinition,
 } from "../core/project";
-import { writeModInfo } from "../core/scaffold";
+import {
+  buildModRenamePlan,
+  executeModRenamePlan,
+  isCaseOnlyRename,
+  renameModScopedFiles,
+  rewriteModIdReferences,
+  writeModInfo,
+} from "../core/scaffold";
 import { createVsCodeFileSystem } from "../vscode/fsAdapter";
 import {
   confirmDestructive,
@@ -18,6 +28,47 @@ import {
   requireCurrentProject,
   type CommandServices,
 } from "./common";
+
+/**
+ * The mod.info `name=` field is the in-game display name and is independent of
+ * the `id=` field. It is only renamed automatically when it still matches the
+ * old ID (i.e. it was never customized); otherwise the user is asked.
+ *
+ * Returns the name to write, or undefined if the user dismissed the prompt.
+ */
+async function resolveUpdatedModName(
+  mod: ModDefinition,
+  newModId: string,
+): Promise<string | undefined> {
+  if (mod.name === mod.id) {
+    return newModId;
+  }
+
+  const choice = await vscode.window.showQuickPick(
+    [
+      {
+        label: `Keep display name "${mod.name}"`,
+        description: "Only the mod ID changes.",
+        rename: false,
+      },
+      {
+        label: `Change display name to "${newModId}"`,
+        description: "Updates name= in mod.info.",
+        rename: true,
+      },
+    ],
+    {
+      title: "Update the mod's display name?",
+      placeHolder: `mod.info "name=" is currently "${mod.name}"`,
+    },
+  );
+
+  if (!choice) {
+    return undefined;
+  }
+
+  return choice.rename ? newModId : mod.name;
+}
 
 export function registerRenameModCommand(
   services: CommandServices,
@@ -37,58 +88,106 @@ export function registerRenameModCommand(
         return;
       }
 
-      if (project.projectConfig.mods.some((entry) => entry.id === newModId)) {
+      // Ignore this mod's own ID so a case-only rename is not treated as a
+      // collision with itself.
+      if (modIdExists(project.projectConfig, newModId, mod.id)) {
         throw new Error(`A mod with ID ${newModId} already exists.`);
+      }
+
+      const updatedName = await resolveUpdatedModName(mod, newModId);
+      if (updatedName === undefined) {
+        return;
       }
 
       const confirmed = await confirmDestructive(
         `Rename mod ID from ${mod.id} to ${newModId}?`,
-        "Renaming a mod ID can break existing saves that reference the original ID.",
+        "Renaming a mod ID can break existing saves that reference the original ID. " +
+          "Files and known code references will be updated, but check any custom " +
+          "strings containing the old ID.",
       );
       if (!confirmed) {
         return;
       }
 
       const fileSystem = createVsCodeFileSystem();
-      const plan = buildModRenamePlan(
+      const buildTarget = project.projectConfig.buildTarget;
+
+      const destination = resolveModRoot(
         project.rootPath,
-        project.projectConfig.buildTarget,
-        mod.id,
+        buildTarget,
         newModId,
       );
+
+      // A case-only rename resolves to the same folder on win32/macOS, so the
+      // existence check must not treat that as a pre-existing destination.
       if (
-        await exists(
-          fileSystem,
-          resolveModRoot(
-            project.rootPath,
-            project.projectConfig.buildTarget,
-            newModId,
-          ),
-        )
+        !isCaseOnlyRename(mod.id, newModId) &&
+        (await exists(fileSystem, destination))
       ) {
         throw new Error(
           `The destination mod folder already exists for ${newModId}.`,
         );
       }
 
-      await fileSystem.rename(plan[0].from, plan[0].to);
-      for (const step of plan.slice(1)) {
-        if (await exists(fileSystem, step.from)) {
-          await fileSystem.rename(step.from, step.to);
-        }
+      const plan = buildModRenamePlan(
+        project.rootPath,
+        buildTarget,
+        mod.id,
+        newModId,
+      );
+
+      await executeModRenamePlan(fileSystem, plan);
+
+      const mediaRoot = resolveModMediaRoot(
+        project.rootPath,
+        buildTarget,
+        newModId,
+      );
+
+      const renamedFiles = await renameModScopedFiles(
+        fileSystem,
+        mediaRoot,
+        mod.id,
+        newModId,
+      );
+      for (const renamedFile of renamedFiles) {
+        logInfo(
+          services.output,
+          `Renamed file to ${path.relative(project.rootPath, renamedFile)}`,
+        );
       }
 
-      const updatedMod: ModDefinition = { ...mod, id: newModId };
+      // Runs after the file renames so paths logged here are the final ones.
+      const rewrittenFiles = await rewriteModIdReferences(
+        fileSystem,
+        mediaRoot,
+        mod.id,
+        newModId,
+      );
+      for (const rewritten of rewrittenFiles) {
+        logInfo(
+          services.output,
+          `Updated ${rewritten.replacements} reference(s) in ` +
+            path.relative(project.rootPath, rewritten.filePath),
+        );
+      }
+
+      const updatedMod: ModDefinition = {
+        ...mod,
+        id: newModId,
+        name: updatedName,
+      };
       const modIndex = project.projectConfig.mods.findIndex(
         (entry) => entry.id === mod.id,
       );
       project.projectConfig.mods[modIndex] = updatedMod;
 
+      // Rewrites mod.info at the new mod root with both id= and name= applied.
       await writeModInfo(
         fileSystem,
         getTemplateRoot(services.context),
         project.rootPath,
-        project.projectConfig.buildTarget,
+        buildTarget,
         updatedMod,
       );
       await writeProjectConfig(
@@ -98,8 +197,24 @@ export function registerRenameModCommand(
       );
 
       services.treeProvider.refresh();
-      logInfo(services.output, `Renamed mod ${mod.id} to ${newModId}`);
-      vscode.window.showInformationMessage(`Renamed mod to ${newModId}.`);
+
+      const nameChanged = updatedName !== mod.name;
+      logInfo(
+        services.output,
+        `Renamed mod ${mod.id} to ${newModId}` +
+          (nameChanged ? ` and display name to "${updatedName}"` : "") +
+          ` (${renamedFiles.length} file(s) renamed, ` +
+          `${rewrittenFiles.length} file(s) updated).`,
+      );
+      vscode.window.showInformationMessage(
+        `Renamed mod to ${newModId}.` +
+          (renamedFiles.length
+            ? ` Updated ${renamedFiles.length} file name(s).`
+            : "") +
+          (rewrittenFiles.length
+            ? ` Rewrote references in ${rewrittenFiles.length} file(s).`
+            : ""),
+      );
     },
   );
 }

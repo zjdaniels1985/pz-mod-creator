@@ -109,6 +109,20 @@ async function getLuaFiles(
     .sort();
 }
 
+/**
+ * Project Zomboid globals that are not reliably covered by the Candle or
+ * PZEventDoc stubs. Declaring them here suppresses "undefined global"
+ * diagnostics from the Lua language server.
+ */
+export const PZ_LUA_GLOBALS = [
+  "Events",
+  "SandboxVars",
+  "getPlayer",
+  "getSpecificPlayer",
+  "ProceduralDistributions",
+  "Perks",
+];
+
 export async function configureLuaIntellisense(
   fileSystem: FileSystemAdapter,
   projectRoot: string,
@@ -129,12 +143,7 @@ export async function configureLuaIntellisense(
     "Lua.runtime.version": "Lua 5.1",
     "Lua.workspace.checkThirdParty": false,
     "Lua.workspace.library": libraries,
-    "Lua.diagnostics.globals": [
-      "Events",
-      "SandboxVars",
-      "getPlayer",
-      "getSpecificPlayer",
-    ],
+    "Lua.diagnostics.globals": [...PZ_LUA_GLOBALS],
   });
 
   await writeJsonFile(

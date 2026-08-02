@@ -22,20 +22,6 @@
     "lua",
     "workshop"
   ],
-  "activationEvents": [
-    "onCommand:pzModCreator.newProject",
-    "onCommand:pzModCreator.createMod",
-    "onCommand:pzModCreator.updateMod",
-    "onCommand:pzModCreator.deleteMod",
-    "onCommand:pzModCreator.renameMod",
-    "onCommand:pzModCreator.addTranslation",
-    "onCommand:pzModCreator.copyTranslation",
-    "onCommand:pzModCreator.clean",
-    "onCommand:pzModCreator.build",
-    "onCommand:pzModCreator.buildAndWatch",
-    "onCommand:pzModCreator.updateDefinitions",
-    "onView:pzModCreator.mods"
-  ],
   "main": "./dist/extension.js",
   "files": [
     "dist/**",
@@ -96,7 +82,8 @@
       "explorer": [
         {
           "id": "pzModCreator.mods",
-          "name": "PZ Mods"
+          "name": "PZ Mods",
+          "icon": ""
         }
       ]
     },
@@ -214,7 +201,7 @@
   "scripts": {
     "compile": "tsc -p ./ && node esbuild.js",
     "watch": "node esbuild.js --watch",
-    "lint": "eslint src --ext .ts && prettier --check \"**/*.{ts,json,md,yml}\"",
+    "lint": "eslint src esbuild.js --ext .ts,.js && prettier --check \"**/*.{ts,json,md,yml}\"",
     "test": "node ./out/test/suite/index.js",
     "package": "vsce package"
   },

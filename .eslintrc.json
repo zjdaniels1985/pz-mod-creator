@@ -10,9 +10,19 @@
     "mocha": true,
     "es2022": true
   },
-  "plugins": ["@typescript-eslint"],
-  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
-  "ignorePatterns": ["dist", "out", "node_modules"],
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "ignorePatterns": [
+    "dist",
+    "out",
+    "node_modules",
+    "*.vsix"
+  ],
   "rules": {
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/consistent-type-imports": [
@@ -21,5 +31,27 @@
         "prefer": "type-imports"
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "*.js",
+        "*.cjs"
+      ],
+      "parser": "espree",
+      "parserOptions": {
+        "project": null,
+        "ecmaVersion": 2022,
+        "sourceType": "script"
+      },
+      "extends": [
+        "eslint:recommended"
+      ],
+      "rules": {
+        "@typescript-eslint/consistent-type-imports": "off",
+        "@typescript-eslint/no-require-imports": "off",
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    }
+  ]
 }
