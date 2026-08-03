@@ -10,19 +10,9 @@
     "mocha": true,
     "es2022": true
   },
-  "plugins": [
-    "@typescript-eslint"
-  ],
-  "extends": [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/recommended"
-  ],
-  "ignorePatterns": [
-    "dist",
-    "out",
-    "node_modules",
-    "*.vsix"
-  ],
+  "plugins": ["@typescript-eslint"],
+  "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+  "ignorePatterns": ["dist", "out", "node_modules", "*.vsix"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/consistent-type-imports": [
@@ -34,19 +24,14 @@
   },
   "overrides": [
     {
-      "files": [
-        "*.js",
-        "*.cjs"
-      ],
+      "files": ["*.js", "*.cjs"],
       "parser": "espree",
       "parserOptions": {
         "project": null,
         "ecmaVersion": 2022,
         "sourceType": "script"
       },
-      "extends": [
-        "eslint:recommended"
-      ],
+      "extends": ["eslint:recommended"],
       "rules": {
         "@typescript-eslint/consistent-type-imports": "off",
         "@typescript-eslint/no-require-imports": "off",
