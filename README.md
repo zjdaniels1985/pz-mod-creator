@@ -9,7 +9,7 @@ Project Zomboid Mod Creator is a VS Code extension for scaffolding, maintaining,
 - Update mod metadata, rename mod IDs, or delete mods with confirmation prompts.
 - Add or copy official translation language files.
 - Build projects into your local Workshop output directory and keep them synced with **Build and Watch**.
-- Configure Lua IntelliSense and download Candle and PZEventDoc definitions.
+- Configure Lua IntelliSense and download Umbrella definitions.
 
 ## Commands
 
@@ -25,7 +25,7 @@ Project Zomboid Mod Creator is a VS Code extension for scaffolding, maintaining,
 | `PZ Mod Creator: Clean Output`              | Delete this extension's generated output folder for the current project.           |
 | `PZ Mod Creator: Build`                     | Copy the project into the configured output directory.                             |
 | `PZ Mod Creator: Build and Watch`           | Toggle continuous file sync into the output folder.                                |
-| `PZ Mod Creator: Update Definitions`        | Refresh Candle and PZEventDoc Lua definition stubs.                                |
+| `PZ Mod Creator: Update Definitions`        | Refresh Umbrella Lua definition stubs.                                             |
 
 ## Settings
 
@@ -35,16 +35,64 @@ Project Zomboid Mod Creator is a VS Code extension for scaffolding, maintaining,
 | `pzModCreator.buildTarget`             | `b42`                                              | Default project build target for new projects.                        |
 | `pzModCreator.watchDebounce`           | `300`                                              | Debounce delay for Build and Watch.                                   |
 | `pzModCreator.cleanBeforeBuild`        | `false`                                            | Delete the generated output folder before each build.                 |
-| `pzModCreator.ignoreGlobs`             | `[                                                 |
-| "**/.git/**",                          |
-| "**/node_modules/**",                  |
-| "**/.pzmodcreator.json",               |
-| "**/.vscode/**",                       |
-| ".types/**"                            |
-| ]`                                     | Glob patterns skipped during build and watch sync. |
+| `pzModCreator.ignoreGlobs [`           |                                                    |                                                                       |
+| `"**/.git/**",`                        |                                                    |                                                                       |
+| `"**/node_modules/**",`                |                                                    |                                                                       |
+| `"**/.pzmodcreator.json",`             |                                                    |                                                                       |
+| `"**/.vscode/**",`                     |                                                    |                                                                       |
+| `".types/**"`                          |                                                    |                                                                       |
+| `]`                                    | Glob patterns skipped during build and watch sync. |                                                                       |
 | `pzModCreator.defaultAuthor`           | `""`                                               | Suggested author name for new projects and mods.                      |
 | `pzModCreator.intellisense.enabled`    | `true`                                             | Enable generated Lua workspace settings and recommendations.          |
 | `pzModCreator.intellisense.autoUpdate` | `true`                                             | Refresh definition stubs automatically when a project is opened.      |
+
+## IntelliSense configuration
+
+When you create a new project, the extension generates both editor-level and
+language-server-level Lua config files:
+
+- `.vscode/settings.json` for VS Code Lua workspace settings.
+- `.vscode/extensions.json` with recommendations for `tangzx.emmylua` and
+  `simkdt.project-zomboid-scripts`.
+- `.emmyrc.json` for EmmyLua analyzer configuration.
+
+The generated `.emmyrc.json` points the EmmyLua workspace at Umbrella and your
+project's mod root. For example (Build 42):
+
+```json
+{
+  "workspace": {
+    "library": [".types/umbrella/library", "Contents/mods"]
+  },
+  "diagnostics": {
+    "enable": true,
+    "disable": [],
+    "enables": ["undefined-global", "global-in-non-module"],
+    "globals": [
+      "Events",
+      "SandboxVars",
+      "getPlayer",
+      "getSpecificPlayer",
+      "ProceduralDistributions",
+      "Perks"
+    ],
+    "severity": {
+      "undefined-global": "warning",
+      "global-in-non-module": "warning"
+    }
+  }
+}
+```
+
+For Build 41 projects, the second library entry is `mods` instead of
+`Contents/mods`.
+
+You can customize `.emmyrc.json` per project to add extra local libraries; the
+extension only rewrites it when IntelliSense configuration runs.
+
+`PZ Mod Creator: Update Definitions` fetches Umbrella stubs from the latest
+GitHub release tag when available, and falls back to the repository default
+branch if release metadata is unavailable.
 
 ## Generated project structure
 

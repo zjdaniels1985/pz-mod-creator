@@ -19,6 +19,10 @@ interface GitHubRepositoryInfo {
   default_branch?: string;
 }
 
+interface GitHubLatestReleaseInfo {
+  tag_name?: string;
+}
+
 interface GitHubTreeEntry {
   path: string;
   type: string;
@@ -26,6 +30,11 @@ interface GitHubTreeEntry {
 
 interface GitHubTreeResponse {
   tree: GitHubTreeEntry[];
+}
+
+interface DefinitionSourceRef {
+  ref: string;
+  refType: "release" | "branch";
 }
 
 export interface DefinitionDownloadSummary {
@@ -41,16 +50,13 @@ export interface DefinitionDownloadResult {
 
 const DEFINITION_SOURCES: DefinitionSource[] = [
   {
-    owner: "asledgehammer",
-    repo: "Candle",
-    targetDirectoryName: "candle",
-  },
-  {
-    owner: "demiurgeQuantified",
-    repo: "PZEventDoc",
-    targetDirectoryName: "pzeventdoc",
+    owner: "PZ-Umbrella",
+    repo: "Umbrella",
+    targetDirectoryName: "umbrella",
   },
 ];
+
+const MAX_PARALLEL_DOWNLOADS = 8;
 
 function getHeaders(): Record<string, string> {
   return {
@@ -91,14 +97,53 @@ async function getDefaultBranch(
   return metadata.default_branch ?? "main";
 }
 
+async function tryGetLatestReleaseTag(
+  fetchImpl: typeof fetch,
+  source: DefinitionSource,
+): Promise<string | undefined> {
+  try {
+    const response = await fetchImpl(
+      `https://api.github.com/repos/${source.owner}/${source.repo}/releases/latest`,
+      { headers: getHeaders() },
+    );
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const release = (await response.json()) as GitHubLatestReleaseInfo;
+    const tagName = release.tag_name?.trim();
+    return tagName ? tagName : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getSourceRef(
+  fetchImpl: typeof fetch,
+  source: DefinitionSource,
+): Promise<DefinitionSourceRef> {
+  const latestReleaseTag = await tryGetLatestReleaseTag(fetchImpl, source);
+  if (latestReleaseTag) {
+    return {
+      ref: latestReleaseTag,
+      refType: "release",
+    };
+  }
+
+  return {
+    ref: await getDefaultBranch(fetchImpl, source),
+    refType: "branch",
+  };
+}
+
 async function getLuaFiles(
   fetchImpl: typeof fetch,
   source: DefinitionSource,
-  branch: string,
+  ref: string,
 ): Promise<string[]> {
   const tree = await fetchJson<GitHubTreeResponse>(
     fetchImpl,
-    `https://api.github.com/repos/${source.owner}/${source.repo}/git/trees/${branch}?recursive=1`,
+    `https://api.github.com/repos/${source.owner}/${source.repo}/git/trees/${ref}?recursive=1`,
   );
   return tree.tree
     .filter(
@@ -109,9 +154,53 @@ async function getLuaFiles(
     .sort();
 }
 
+async function downloadLuaFiles(
+  fileSystem: FileSystemAdapter,
+  targetDirectory: string,
+  source: DefinitionSource,
+  sourceRef: DefinitionSourceRef,
+  files: string[],
+  fetchImpl: typeof fetch,
+): Promise<number> {
+  if (files.length === 0) {
+    return 0;
+  }
+
+  let nextIndex = 0;
+  const workerCount = Math.min(MAX_PARALLEL_DOWNLOADS, files.length);
+
+  async function worker(): Promise<number> {
+    let downloaded = 0;
+    while (nextIndex < files.length) {
+      const fileIndex = nextIndex;
+      nextIndex += 1;
+
+      const relativeFilePath = files[fileIndex];
+      if (!relativeFilePath) {
+        continue;
+      }
+
+      const rawUrl = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${sourceRef.ref}/${relativeFilePath}`;
+      const content = await fetchText(fetchImpl, rawUrl);
+      await writeTextFile(
+        fileSystem,
+        path.join(targetDirectory, relativeFilePath),
+        content,
+      );
+      downloaded += 1;
+    }
+    return downloaded;
+  }
+
+  const workerResults = await Promise.all(
+    Array.from({ length: workerCount }, () => worker()),
+  );
+  return workerResults.reduce((total, value) => total + value, 0);
+}
+
 /**
- * Project Zomboid globals that are not reliably covered by the Candle or
- * PZEventDoc stubs. Declaring them here suppresses "undefined global"
+ * Project Zomboid globals that are not reliably covered by Umbrella stubs.
+ * Declaring them here suppresses "undefined global"
  * diagnostics from the Lua language server.
  */
 export const PZ_LUA_GLOBALS = [
@@ -132,8 +221,7 @@ export async function configureLuaIntellisense(
   await ensureDirectory(fileSystem, vscodeDirectory);
 
   const libraries = [
-    "${workspaceFolder}/.types/candle",
-    "${workspaceFolder}/.types/pzeventdoc",
+    "${workspaceFolder}/.types/umbrella/library",
     buildTarget === "b42"
       ? "${workspaceFolder}/Contents/mods"
       : "${workspaceFolder}/mods",
@@ -146,11 +234,30 @@ export async function configureLuaIntellisense(
     "Lua.diagnostics.globals": [...PZ_LUA_GLOBALS],
   });
 
+  await writeJsonFile(fileSystem, path.join(projectRoot, ".emmyrc.json"), {
+    workspace: {
+      library: [
+        ".types/umbrella/library",
+        buildTarget === "b42" ? "Contents/mods" : "mods",
+      ],
+    },
+    diagnostics: {
+      enable: true,
+      disable: [],
+      enables: ["undefined-global", "global-in-non-module"],
+      globals: [...PZ_LUA_GLOBALS],
+      severity: {
+        "undefined-global": "warning",
+        "global-in-non-module": "warning",
+      },
+    },
+  });
+
   await writeJsonFile(
     fileSystem,
     path.join(vscodeDirectory, "extensions.json"),
     {
-      recommendations: ["sumneko.lua"],
+      recommendations: ["tangzx.emmylua", "simkdt.project-zomboid-scripts"],
     },
   );
 }
@@ -169,22 +276,19 @@ export async function updateLuaDefinitions(
   for (const source of DEFINITION_SOURCES) {
     const targetDirectory = path.join(typeRoot, source.targetDirectoryName);
     try {
-      const branch = await getDefaultBranch(fetchImpl, source);
-      const files = await getLuaFiles(fetchImpl, source, branch);
+      const sourceRef = await getSourceRef(fetchImpl, source);
+      const files = await getLuaFiles(fetchImpl, source, sourceRef.ref);
       await deleteIfExists(fileSystem, targetDirectory, { recursive: true });
       await ensureDirectory(fileSystem, targetDirectory);
 
-      let downloaded = 0;
-      for (const relativeFilePath of files) {
-        const rawUrl = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${branch}/${relativeFilePath}`;
-        const content = await fetchText(fetchImpl, rawUrl);
-        await writeTextFile(
-          fileSystem,
-          path.join(targetDirectory, relativeFilePath),
-          content,
-        );
-        downloaded += 1;
-      }
+      const downloaded = await downloadLuaFiles(
+        fileSystem,
+        targetDirectory,
+        source,
+        sourceRef,
+        files,
+        fetchImpl,
+      );
 
       await writeJsonFile(
         fileSystem,
@@ -192,7 +296,8 @@ export async function updateLuaDefinitions(
         {
           owner: source.owner,
           repo: source.repo,
-          branch,
+          ref: sourceRef.ref,
+          refType: sourceRef.refType,
           filesDownloaded: downloaded,
           fetchedAt: new Date().toISOString(),
         },
@@ -204,7 +309,7 @@ export async function updateLuaDefinitions(
       } satisfies DefinitionDownloadSummary;
       summaries.push(summary);
       logger?.(
-        `Downloaded ${downloaded} Lua definition files from ${summary.source}.`,
+        `Downloaded ${downloaded} Lua definition files from ${summary.source} (${sourceRef.refType}: ${sourceRef.ref}).`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
