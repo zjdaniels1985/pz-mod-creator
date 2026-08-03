@@ -1,64 +1,59 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "watch",
-            "type": "npm",
-            "script": "watch",
-            "isBackground": true,
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "never",
-                "panel": "dedicated"
-            },
-            "problemMatcher": {
-                "owner": "esbuild",
-                "source": "esbuild",
-                "fileLocation": [
-                    "relative",
-                    "${workspaceFolder}"
-                ],
-                "pattern": [
-                    {
-                        "regexp": "^(?:✘|▲)\\s+\\[(ERROR|WARNING)\\]\\s+(.+)$",
-                        "severity": 1,
-                        "message": 2
-                    },
-                    {
-                        "regexp": "^\\s+(.+):(\\d+):(\\d+):$",
-                        "file": 1,
-                        "line": 2,
-                        "column": 3
-                    }
-                ],
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "^\\[watch\\] build started",
-                    "endsPattern": "^\\[watch\\] build finished"
-                }
-            }
-        },
-        {
-            "label": "compile",
-            "type": "npm",
-            "script": "compile",
-            "group": "build",
-            "problemMatcher": [
-                "$tsc"
-            ]
-        },
-        {
-            "label": "test",
-            "type": "npm",
-            "script": "test",
-            "group": {
-                "kind": "test",
-                "isDefault": true
-            },
-            "problemMatcher": []
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "watch",
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "esbuild",
+        "source": "esbuild",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^(?:✘|▲)\\s+\\[(ERROR|WARNING)\\]\\s+(.+)$",
+            "severity": 1,
+            "message": 2
+          },
+          {
+            "regexp": "^\\s+(.+):(\\d+):(\\d+):$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
         }
-    ]
+      }
+    },
+    {
+      "label": "compile",
+      "type": "npm",
+      "script": "compile",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "test",
+      "type": "npm",
+      "script": "test",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
 }
