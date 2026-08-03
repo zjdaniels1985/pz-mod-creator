@@ -1,37 +1,31 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Run Extension",
-            "type": "extensionHost",
-            "request": "launch",
-            "env": {
-                "NODE_OPTIONS": "--no-deprecation"
-            },
-            "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}"
-            ],
-            "outFiles": [
-                "${workspaceFolder}/dist/**/*.js"
-            ],
-            "preLaunchTask": "${defaultBuildTask}"
-        },
-        {
-            "name": "Run Extension (empty sandbox)",
-            "type": "extensionHost",
-            "request": "launch",
-            "env": {
-                "NODE_OPTIONS": "--no-deprecation"
-            },
-            "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}",
-                "--disable-extensions",
-                "${workspaceFolder}/.sandbox"
-            ],
-            "outFiles": [
-                "${workspaceFolder}/dist/**/*.js"
-            ],
-            "preLaunchTask": "${defaultBuildTask}"
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "env": {
+        "NODE_OPTIONS": "--no-deprecation"
+      },
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "${defaultBuildTask}"
+    },
+    {
+      "name": "Run Extension (empty sandbox)",
+      "type": "extensionHost",
+      "request": "launch",
+      "env": {
+        "NODE_OPTIONS": "--no-deprecation"
+      },
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--disable-extensions",
+        "${workspaceFolder}/.sandbox"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "${defaultBuildTask}"
+    }
+  ]
 }

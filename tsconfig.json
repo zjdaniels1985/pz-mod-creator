@@ -3,9 +3,7 @@
     "module": "node16",
     "moduleResolution": "node16",
     "target": "ES2022",
-    "lib": [
-      "ES2022"
-    ],
+    "lib": ["ES2022"],
     "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,
@@ -14,16 +12,8 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": [
-      "node",
-      "mocha"
-    ]
+    "types": ["node", "mocha"]
   },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "dist",
-    "node_modules"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }
