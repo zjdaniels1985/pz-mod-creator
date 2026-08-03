@@ -203,7 +203,8 @@
     "watch": "node esbuild.js --watch",
     "lint": "eslint src esbuild.js --ext .ts,.js && prettier --check \"**/*.{ts,json,md,yml}\"",
     "test": "node ./out/test/suite/index.js",
-    "package": "vsce package"
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/glob": "^9.0.0",
