@@ -3,7 +3,7 @@
   "displayName": "Project Zomboid Mod Creator",
   "description": "Create, manage, build, and watch Project Zomboid mods from VS Code.",
   "version": "0.1.0",
-  "publisher": "copilot",
+  "publisher": "DanielsLabs",
   "license": "MIT",
   "icon": "media/icon.png",
   "repository": {
@@ -11,7 +11,7 @@
     "url": "https://github.com/zjdaniels1985/pz-mod-creator"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Other"

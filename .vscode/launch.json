@@ -5,6 +5,9 @@
             "name": "Run Extension",
             "type": "extensionHost",
             "request": "launch",
+            "env": {
+                "NODE_OPTIONS": "--no-deprecation"
+            },
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ],
@@ -17,6 +20,9 @@
             "name": "Run Extension (empty sandbox)",
             "type": "extensionHost",
             "request": "launch",
+            "env": {
+                "NODE_OPTIONS": "--no-deprecation"
+            },
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}",
                 "--disable-extensions",
