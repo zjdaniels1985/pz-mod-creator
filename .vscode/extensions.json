@@ -1,6 +1,3 @@
 {
-    "recommendations": [
-        "tangzx.emmylua",
-        "simkdt.project-zomboid-scripts"
-    ]
+  "recommendations": ["tangzx.emmylua", "simkdt.project-zomboid-scripts"]
 }
