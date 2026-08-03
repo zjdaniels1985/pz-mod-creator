@@ -131,17 +131,27 @@ export function registerNewProjectCommand(
             );
 
             if (getSetting<boolean>("intellisense.autoUpdate", true)) {
-              progress.report({ message: "Downloading Lua definitions" });
-              const result = await updateLuaDefinitions(
-                fileSystem,
-                projectRoot,
-                (message) => logInfo(services.output, message),
+              progress.report({
+                message: "Scheduling Lua definitions download",
+              });
+              void vscode.window.withProgress(
+                {
+                  location: vscode.ProgressLocation.Notification,
+                  title: "Downloading Project Zomboid Lua definitions",
+                },
+                async () => {
+                  const result = await updateLuaDefinitions(
+                    fileSystem,
+                    projectRoot,
+                    (message) => logInfo(services.output, message),
+                  );
+                  if (result.failures.length) {
+                    vscode.window.showWarningMessage(
+                      "Project created, but one or more Lua definition sources could not be downloaded. Use “PZ Mod Creator: Update Definitions” to retry later.",
+                    );
+                  }
+                },
               );
-              if (result.failures.length) {
-                vscode.window.showWarningMessage(
-                  "Project created, but one or more Lua definition sources could not be downloaded. Use “PZ Mod Creator: Update Definitions” to retry later.",
-                );
-              }
             }
           }
         },

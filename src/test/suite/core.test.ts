@@ -6,6 +6,10 @@ import * as path from "node:path";
 import { shouldIgnoreRelativePath } from "../../core/build";
 import { NodeFileSystemAdapter, readTextFile } from "../../core/fs";
 import {
+  configureLuaIntellisense,
+  updateLuaDefinitions,
+} from "../../core/intellisense";
+import {
   getContentVersionFolder,
   isPathInside,
   isWindowsReservedName,
@@ -170,7 +174,7 @@ describe("core logic", () => {
     const ignoreGlobs = ["**/.git/**", "**/node_modules/**", ".types/**"];
 
     assert.strictEqual(
-      shouldIgnoreRelativePath(".types/candle/file.lua", ignoreGlobs),
+      shouldIgnoreRelativePath(".types/umbrella/file.lua", ignoreGlobs),
       true,
     );
     assert.strictEqual(
@@ -190,7 +194,10 @@ describe("core logic", () => {
     const ignoreGlobs = ["**/.git/**", ".types/**"];
 
     assert.strictEqual(
-      shouldIgnoreRelativePath(p(".types", "candle", "file.lua"), ignoreGlobs),
+      shouldIgnoreRelativePath(
+        p(".types", "umbrella", "file.lua"),
+        ignoreGlobs,
+      ),
       true,
       "native separators must normalize before glob matching",
     );
@@ -292,6 +299,201 @@ describe("core logic", () => {
         true,
       );
       assert.strictEqual(versionInfo.includes("versionMin=42.0"), true);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("writes .emmyrc.json for new IntelliSense config", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pzmc-emmy-"));
+    const fileSystem = new NodeFileSystemAdapter();
+    try {
+      await configureLuaIntellisense(fileSystem, tempRoot, "b42");
+
+      const emmyConfig = JSON.parse(
+        await readTextFile(fileSystem, path.join(tempRoot, ".emmyrc.json")),
+      ) as {
+        workspace: {
+          library: string[];
+        };
+        diagnostics: {
+          enable: boolean;
+          disable: string[];
+          enables: string[];
+          globals: string[];
+          severity: Record<string, string>;
+        };
+      };
+
+      assert.deepStrictEqual(emmyConfig.workspace.library, [
+        ".types/umbrella/library",
+        "Contents/mods",
+      ]);
+      assert.strictEqual(emmyConfig.diagnostics.enable, true);
+      assert.strictEqual(
+        emmyConfig.diagnostics.enables.includes("undefined-global"),
+        true,
+      );
+      assert.strictEqual(
+        emmyConfig.diagnostics.enables.includes("global-in-non-module"),
+        true,
+      );
+      assert.deepStrictEqual(emmyConfig.diagnostics.globals, [
+        "Events",
+        "SandboxVars",
+        "getPlayer",
+        "getSpecificPlayer",
+        "ProceduralDistributions",
+        "Perks",
+      ]);
+      assert.strictEqual(
+        emmyConfig.diagnostics.severity["undefined-global"],
+        "warning",
+      );
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("downloads definitions from the latest release tag when available", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pzmc-release-"));
+    const fileSystem = new NodeFileSystemAdapter();
+    const urls: string[] = [];
+
+    const fetchMock = async (input: string | URL | Request) => {
+      const url = String(input);
+      urls.push(url);
+
+      if (
+        url ===
+        "https://api.github.com/repos/PZ-Umbrella/Umbrella/releases/latest"
+      ) {
+        return new Response(JSON.stringify({ tag_name: "42.20.0" }), {
+          status: 200,
+        });
+      }
+
+      if (
+        url ===
+        "https://api.github.com/repos/PZ-Umbrella/Umbrella/git/trees/42.20.0?recursive=1"
+      ) {
+        return new Response(
+          JSON.stringify({
+            tree: [
+              { path: "library/Umbrella.lua", type: "blob" },
+              { path: "README.md", type: "blob" },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (
+        url ===
+        "https://raw.githubusercontent.com/PZ-Umbrella/Umbrella/42.20.0/library/Umbrella.lua"
+      ) {
+        return new Response("---@class Umbrella\n", { status: 200 });
+      }
+
+      return new Response("not found", { status: 404 });
+    };
+
+    try {
+      const result = await updateLuaDefinitions(
+        fileSystem,
+        tempRoot,
+        undefined,
+        fetchMock as typeof fetch,
+      );
+
+      assert.strictEqual(result.failures.length, 0);
+      assert.strictEqual(result.summaries[0]?.filesDownloaded, 1);
+      assert.strictEqual(
+        urls.includes(
+          "https://api.github.com/repos/PZ-Umbrella/Umbrella/releases/latest",
+        ),
+        true,
+      );
+
+      const manifest = JSON.parse(
+        await readTextFile(
+          fileSystem,
+          path.join(tempRoot, ".types", "umbrella", "manifest.json"),
+        ),
+      ) as {
+        ref: string;
+        refType: string;
+      };
+      assert.strictEqual(manifest.ref, "42.20.0");
+      assert.strictEqual(manifest.refType, "release");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the default branch when latest release is unavailable", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pzmc-fallback-"));
+    const fileSystem = new NodeFileSystemAdapter();
+
+    const fetchMock = async (input: string | URL | Request) => {
+      const url = String(input);
+
+      if (
+        url ===
+        "https://api.github.com/repos/PZ-Umbrella/Umbrella/releases/latest"
+      ) {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (url === "https://api.github.com/repos/PZ-Umbrella/Umbrella") {
+        return new Response(JSON.stringify({ default_branch: "main" }), {
+          status: 200,
+        });
+      }
+
+      if (
+        url ===
+        "https://api.github.com/repos/PZ-Umbrella/Umbrella/git/trees/main?recursive=1"
+      ) {
+        return new Response(
+          JSON.stringify({
+            tree: [{ path: "library/Umbrella.lua", type: "blob" }],
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (
+        url ===
+        "https://raw.githubusercontent.com/PZ-Umbrella/Umbrella/main/library/Umbrella.lua"
+      ) {
+        return new Response("---@class Umbrella\n", { status: 200 });
+      }
+
+      return new Response("not found", { status: 404 });
+    };
+
+    try {
+      const result = await updateLuaDefinitions(
+        fileSystem,
+        tempRoot,
+        undefined,
+        fetchMock as typeof fetch,
+      );
+
+      assert.strictEqual(result.failures.length, 0);
+
+      const manifest = JSON.parse(
+        await readTextFile(
+          fileSystem,
+          path.join(tempRoot, ".types", "umbrella", "manifest.json"),
+        ),
+      ) as {
+        ref: string;
+        refType: string;
+      };
+      assert.strictEqual(manifest.ref, "main");
+      assert.strictEqual(manifest.refType, "branch");
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
