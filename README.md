@@ -7,12 +7,15 @@ Project Zomboid Mod Creator is a VS Code extension for scaffolding, maintaining,
 This repository uses VS Code Workspace Recommendations to set up the development environment.
 
 ### Essential Extensions
-* **EmmyLua** (`tangzx.emmylua`) - **Required** for Lua autocomplete, type checking, and code intelligence.
+
+- **EmmyLua** (`tangzx.emmylua`) - **Required** for Lua autocomplete, type checking, and code intelligence.
 
 ### Optional Extensions
-* **Project Zomboid Scripts** (`SimKDT.project-zomboid-scripts`) - Highly recommended for specialized script syntax and automation.
+
+- **Project Zomboid Scripts** (`SimKDT.project-zomboid-scripts`) - Highly recommended for specialized script syntax and automation.
 
 ### How to Install
+
 1. Open the **Extensions** view in VS Code (`Ctrl+Shift+X` or `Cmd+Shift+X`).
 2. Search for `@recommended` in the search bar.
 3. Install the extensions listed under the **Workspace Recommendations** section.
@@ -44,22 +47,22 @@ This repository uses VS Code Workspace Recommendations to set up the development
 
 ## Settings
 
-| Setting                                | Default                                            | Description                                                           |
-| -------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
-| `pzModCreator.outputDirectory`         | `""`                                               | Output path for builds. Empty resolves to `<home>/Zomboid/Workshop/`. |
-| `pzModCreator.buildTarget`             | `b42`                                              | Default project build target for new projects.                        |
-| `pzModCreator.watchDebounce`           | `300`                                              | Debounce delay for Build and Watch.                                   |
-| `pzModCreator.cleanBeforeBuild`        | `false`                                            | Delete the generated output folder before each build.                 |
-| `pzModCreator.ignoreGlobs`             | `[`                                                |                                                                       |
-|                                        | `"**/.git/**",`                                    |                                                                       |
-|                                        | `"**/node_modules/**",`                            |                                                                       |
-|                                        | `"**/.pzmodcreator.json",`                         |                                                                       |
-|                                        | `"**/.vscode/**",`                                 |                                                                       |
-|                                        | `".types/**"`                                      |                                                                       |
-|                                        | `]`                                                | Glob patterns skipped during build and watch sync.                    |
-| `pzModCreator.defaultAuthor`           | `""`                                               | Suggested author name for new projects and mods.                      |
-| `pzModCreator.intellisense.enabled`    | `true`                                             | Enable generated Lua workspace settings and recommendations.          |
-| `pzModCreator.intellisense.autoUpdate` | `true`                                             | Refresh definition stubs automatically when a project is opened.      |
+| Setting                                | Default                    | Description                                                           |
+| -------------------------------------- | -------------------------- | --------------------------------------------------------------------- |
+| `pzModCreator.outputDirectory`         | `""`                       | Output path for builds. Empty resolves to `<home>/Zomboid/Workshop/`. |
+| `pzModCreator.buildTarget`             | `b42`                      | Default project build target for new projects.                        |
+| `pzModCreator.watchDebounce`           | `300`                      | Debounce delay for Build and Watch.                                   |
+| `pzModCreator.cleanBeforeBuild`        | `false`                    | Delete the generated output folder before each build.                 |
+| `pzModCreator.ignoreGlobs`             | `[`                        |                                                                       |
+|                                        | `"**/.git/**",`            |                                                                       |
+|                                        | `"**/node_modules/**",`    |                                                                       |
+|                                        | `"**/.pzmodcreator.json",` |                                                                       |
+|                                        | `"**/.vscode/**",`         |                                                                       |
+|                                        | `".types/**"`              |                                                                       |
+|                                        | `]`                        | Glob patterns skipped during build and watch sync.                    |
+| `pzModCreator.defaultAuthor`           | `""`                       | Suggested author name for new projects and mods.                      |
+| `pzModCreator.intellisense.enabled`    | `true`                     | Enable generated Lua workspace settings and recommendations.          |
+| `pzModCreator.intellisense.autoUpdate` | `true`                     | Refresh definition stubs automatically when a project is opened.      |
 
 ## IntelliSense configuration
 
