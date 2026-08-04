@@ -9,7 +9,7 @@ on:
       version:
         description: "Release version (for example: 0.1.0)"
         required: true
-        default: "0.1.0"
+        default: "0.2.0"
 
 permissions:
   contents: write
@@ -20,12 +20,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
-
+        uses: actions/checkout@v4
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6.5.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Resolve tag and version
