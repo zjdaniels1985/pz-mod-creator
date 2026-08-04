@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- `README.md` Updated. Added Recommended VS Code Extensions.
+
 ## 0.2.0
 
 - Switched Lua definition downloads from Candle and PZEventDoc to Umbrella.
